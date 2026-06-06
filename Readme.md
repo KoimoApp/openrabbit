@@ -155,4 +155,4 @@ Licensed under the MIT license.
 
 ---
 
-![version](https://img.shields.io/badge/version-v0.6.1-orange)
+![version](https://img.shields.io/badge/version-v0.6.2-orange)
