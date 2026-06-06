@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.hackclub.com/019dd5c5-82e4-7a61-b2f2-47d14fa325a2/Untitled%20design%20(9).png" width="128" height="128" alt="OpenRabbit icon">
+  <img src="assets/logo.png" width="128" height="128" alt="OpenRabbit icon">
 </p>
 
 <h1 align="center">OpenRabbit</h1>
