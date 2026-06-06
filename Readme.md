@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <b>:copilot:</b> <a href="https://github.com/aryan6673/openrabbit/releases/latest"><b>Get Workflow</b></a><br>
+  <b>:copilot:</b> <a href="https://github.com/Aledon8/OpenLeukemia/pull/12"><b>See Example PR</b></a><br>
   <sub></sub>
 </p>
 
