@@ -22,6 +22,11 @@
 <p align="center">
   <i>Thanks to the contributors and maintainers for making OpenRabbit possible.</i>
 </p>
+<p align="center">
+  <a href="https://github.com/aryan6673/openrabbit/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=aryan6673/openrabbit" />
+  </a>
+</p>
 
 ## Overview
 
