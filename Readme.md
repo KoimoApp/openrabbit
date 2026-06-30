@@ -119,6 +119,12 @@ If you prefer to run OpenRabbit as a GitHub App (centralized for multiple repos)
 ### 3. Deploy OpenRabbit App
 You can host OpenRabbit on any Node.js compatible platform (Heroku, Railway, Vercel, or your own VPS).
 
+#### Deploying to Vercel
+OpenRabbit is pre-configured for Vercel.
+1. Click the button below to deploy (or connect your repo to Vercel manually):
+   [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Faryanbrite%2Fopenrabbit&env=APP_ID,PRIVATE_KEY,WEBHOOK_SECRET,LLM_API_KEY)
+2. Add the required environment variables during the Vercel setup.
+
 1. Clone this repository.
 2. Create a `.env` file with the following variables:
    ```env

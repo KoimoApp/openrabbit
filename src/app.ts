@@ -10,12 +10,15 @@ const requiredEnv = ['APP_ID', 'PRIVATE_KEY', 'WEBHOOK_SECRET', 'LLM_API_KEY'];
 for (const key of requiredEnv) {
   if (!process.env[key]) {
     console.error(`Missing required environment variable: ${key}`);
-    process.exit(1);
+    // Only exit in non-serverless environments
+    if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+      process.exit(1);
+    }
   }
 }
 
 const appId = process.env.APP_ID!;
-const privateKey = process.env.PRIVATE_KEY!.replace(/\\n/g, '\n');
+const privateKey = process.env.PRIVATE_KEY?.replace(/\\n/g, '\n') || '';
 const webhookSecret = process.env.WEBHOOK_SECRET!;
 
 const app = new App({
@@ -60,7 +63,6 @@ async function handlePullRequest({ payload }: any) {
 
   try {
     const octokit = await app.getInstallationOctokit(installationId);
-    // Retrieve token for the review
     const auth: any = await octokit.auth();
     const token = auth.token;
 
@@ -84,7 +86,7 @@ async function handlePullRequest({ payload }: any) {
   }
 }
 
-const expressApp = express();
+export const expressApp = express();
 const port = process.env.PORT || 3000;
 
 expressApp.use(morgan('combined'));
@@ -102,19 +104,22 @@ expressApp.use(createNodeMiddleware(app.webhooks, {
   } as any
 }));
 
-const server = expressApp.listen(port, () => {
-  console.log(`OpenRabbit GitHub App listening at http://localhost:${port}`);
-});
-
-const shutdown = () => {
-  console.log('Shutting down...');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  const server = expressApp.listen(port, () => {
+    console.log(`OpenRabbit GitHub App listening at http://localhost:${port}`);
   });
-  // Force close after 10s
-  setTimeout(() => process.exit(1), 10000);
-};
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+  const shutdown = () => {
+    console.log('Shutting down...');
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10000);
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+}
+
+export default expressApp;
