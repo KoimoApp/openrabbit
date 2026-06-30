@@ -123,6 +123,7 @@ You can host OpenRabbit on any Node.js compatible platform (Heroku, Railway, Ver
 2. Create a `.env` file with the following variables:
    ```env
    APP_ID=your_app_id
+   # The private key should be in a single line with literal \n instead of newlines if using env vars
    PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
    WEBHOOK_SECRET=your_webhook_secret
    LLM_API_KEY=your_llm_api_key

@@ -5,6 +5,14 @@ import { createNodeMiddleware } from '@octokit/webhooks';
 import { runReview } from './reviewer.js';
 import type { ReviewLens, LLMProvider, ReviewMode, ToneMode } from './types.js';
 
+const requiredEnv = ['APP_ID', 'PRIVATE_KEY', 'WEBHOOK_SECRET', 'LLM_API_KEY'];
+for (const key of requiredEnv) {
+  if (!process.env[key]) {
+    console.error(`Missing required environment variable: ${key}`);
+    process.exit(1);
+  }
+}
+
 const appId = process.env.APP_ID!;
 const privateKey = process.env.PRIVATE_KEY!.replace(/\\n/g, '\n');
 const webhookSecret = process.env.WEBHOOK_SECRET!;
@@ -22,7 +30,7 @@ app.webhooks.on('pull_request.reopened', handlePullRequest);
 app.webhooks.on('pull_request.synchronize', handlePullRequest);
 app.webhooks.on('pull_request.edited', handlePullRequest);
 
-async function handlePullRequest({ octokit, payload }: any) {
+async function handlePullRequest({ payload }: any) {
   console.log(`Received pull_request event for ${payload.repository.full_name}#${payload.pull_request.number}`);
 
   const repository = payload.repository;
@@ -43,8 +51,13 @@ async function handlePullRequest({ octokit, payload }: any) {
   }
 
   // Get installation token
+  if (!payload.installation) {
+    console.error('No installation in payload');
+    return;
+  }
   const installationId = payload.installation.id;
-  const { token } = await app.getInstallationOctokit(installationId).then(it => it.auth() as Promise<{ token: string }>);
+  const octokit = await app.getInstallationOctokit(installationId);
+  const { token } = await octokit.auth() as { token: string };
 
   try {
     await runReview({
@@ -72,6 +85,19 @@ const port = process.env.PORT || 3000;
 
 expressApp.use(createNodeMiddleware(app.webhooks));
 
-expressApp.listen(port, () => {
+const server = expressApp.listen(port, () => {
   console.log(`OpenRabbit GitHub App listening at http://localhost:${port}`);
 });
+
+const shutdown = () => {
+  console.log('Shutting down...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+  // Force close after 10s
+  setTimeout(() => process.exit(1), 10000);
+};
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
