@@ -1,13 +1,14 @@
 {
+  "version": 2,
   "functions": {
     "src/app.ts": {
-      "runtime": "@vercel/node"
+      "runtime": "nodejs20.x"
     }
   },
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "src/app.ts"
+      "destination": "/src/app.ts"
     }
   ]
 }
