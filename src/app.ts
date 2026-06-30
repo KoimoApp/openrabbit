@@ -6,11 +6,13 @@ import { createNodeMiddleware } from '@octokit/webhooks';
 import { runReview } from './reviewer.js';
 import type { ReviewLens, LLMProvider, ReviewMode, ToneMode } from './types.js';
 
-const requiredEnv = ['APP_ID', 'PRIVATE_KEY', 'WEBHOOK_SECRET', 'LLM_API_KEY'];
-for (const key of requiredEnv) {
-  if (!process.env[key]) {
-    console.error(`Missing required environment variable: ${key}`);
-    process.exit(1);
+if (process.env.VERCEL !== '1') {
+  const requiredEnv = ['APP_ID', 'PRIVATE_KEY', 'WEBHOOK_SECRET', 'LLM_API_KEY'];
+  for (const key of requiredEnv) {
+    if (!process.env[key]) {
+      console.error(`Missing required environment variable: ${key}`);
+      process.exit(1);
+    }
   }
 }
 
@@ -102,19 +104,23 @@ expressApp.use(createNodeMiddleware(app.webhooks, {
   } as any
 }));
 
-const server = expressApp.listen(port, () => {
-  console.log(`OpenRabbit GitHub App listening at http://localhost:${port}`);
-});
-
-const shutdown = () => {
-  console.log('Shutting down...');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
+if (process.env.VERCEL !== '1') {
+  const server = expressApp.listen(port, () => {
+    console.log(`OpenRabbit GitHub App listening at http://localhost:${port}`);
   });
-  // Force close after 10s
-  setTimeout(() => process.exit(1), 10000);
-};
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+  const shutdown = () => {
+    console.log('Shutting down...');
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(0);
+    });
+    // Force close after 10s
+    setTimeout(() => process.exit(1), 10000);
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+}
+
+export default expressApp;
