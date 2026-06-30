@@ -1,5 +1,8 @@
 name: OpenRabbit
 description: GitHub Action that generates PR review summaries and inline comments using any LLM provider.
+branding:
+  icon: git-pull-request
+  color: purple
 inputs:
   github_token:
     description: GitHub token for PR review actions
