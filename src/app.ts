@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import morgan from 'morgan';
 import { App } from '@octokit/app';
 import { createNodeMiddleware } from '@octokit/webhooks';
 import { runReview } from './reviewer.js';
@@ -56,10 +57,13 @@ async function handlePullRequest({ payload }: any) {
     return;
   }
   const installationId = payload.installation.id;
-  const octokit = await app.getInstallationOctokit(installationId);
-  const { token } = await octokit.auth() as { token: string };
 
   try {
+    const octokit = await app.getInstallationOctokit(installationId);
+    // Retrieve token for the review
+    const auth: any = await octokit.auth();
+    const token = auth.token;
+
     await runReview({
       owner: repository.owner.login,
       repo: repository.name,
@@ -83,7 +87,20 @@ async function handlePullRequest({ payload }: any) {
 const expressApp = express();
 const port = process.env.PORT || 3000;
 
-expressApp.use(createNodeMiddleware(app.webhooks));
+expressApp.use(morgan('combined'));
+
+expressApp.get('/health', (_req, res) => {
+  res.status(200).send('OK');
+});
+
+expressApp.use(createNodeMiddleware(app.webhooks, {
+  log: {
+    debug: console.log,
+    info: console.log,
+    warn: console.warn,
+    error: console.error,
+  } as any
+}));
 
 const server = expressApp.listen(port, () => {
   console.log(`OpenRabbit GitHub App listening at http://localhost:${port}`);
