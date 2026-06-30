@@ -1,7 +1,8 @@
 {
+  "version": 2,
   "functions": {
     "src/app.ts": {
-      "runtime": "@vercel/node"
+      "runtime": "nodejs20.x"
     }
   },
   "rewrites": [
