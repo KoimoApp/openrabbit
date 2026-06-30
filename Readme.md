@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" width="128" height="128" alt="OpenRabbit icon">
+  <img src="assets/logo.png" width="200" height="200" alt="OpenRabbit icon">
 </p>
 
 <h1 align="center">OpenRabbit</h1>
@@ -36,13 +36,15 @@ OpenRabbit is a free (you can even get a free llm api explained below), open-sou
 
 ---
 
-### Zero Hosting Required
+### Flexibility: GitHub Action or GitHub App
 
-You don't need to pay for a subscription or manage a server. OpenRabbit runs **completely** on your own GitHub Actions environment. Your code stays in your runner; it is never proxied or stored by a central authority.
+OpenRabbit can be used in two ways:
+1. **GitHub Action:** Zero hosting required. Runs on your own GitHub Actions environment.
+2. **GitHub App:** More powerful, centralizes reviews for multiple repositories. Requires hosting.
 
 ---
 
-## Quickstart in 2 minutes
+## Quickstart: GitHub Action (2 minutes)
 
 Simply create a file at `.github/workflows/reviewer.yml` and paste the following:
 
@@ -89,6 +91,54 @@ jobs:
 > OpenRabbit will automatically use the secret securely inside your GitHub Actions workflow.
 >
 > This keeps your API key encrypted and prevents accidental leaks in commits, logs, or pull requests.
+
+---
+
+## Quickstart: GitHub App
+
+If you prefer to run OpenRabbit as a GitHub App (centralized for multiple repos), follow these steps:
+
+### 1. Create a GitHub App
+1. Go to your GitHub **Settings** -> **Developer settings** -> **GitHub Apps** -> **New GitHub App**.
+2. Give it a name (e.g., `OpenRabbit`).
+3. Set the **Homepage URL** (e.g., your repo URL).
+4. Uncheck **Active** under **Webhook** for now (you'll enable it after deployment).
+5. Grant the following **Permissions**:
+   - **Repository permissions**:
+     - `Contents`: Read-only
+     - `Pull requests`: Read & write
+     - `Metadata`: Read-only
+6. Under **Subscribe to events**, select **Pull request**.
+7. Click **Create GitHub App**.
+
+### 2. Generate Credentials
+1. Note the **App ID**.
+2. Generate a **Private key** and download the `.pem` file.
+3. Create a **Webhook secret**.
+
+### 3. Deploy OpenRabbit App
+You can host OpenRabbit on any Node.js compatible platform (Heroku, Railway, Vercel, or your own VPS).
+
+1. Clone this repository.
+2. Create a `.env` file with the following variables:
+   ```env
+   APP_ID=your_app_id
+   # The private key should be in a single line with literal \n instead of newlines if using env vars
+   PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+   WEBHOOK_SECRET=your_webhook_secret
+   LLM_API_KEY=your_llm_api_key
+   LLM_PROVIDER=openrouter
+   LLM_MODEL=openrouter/free
+   PORT=3000
+   ```
+3. Run `npm install` and `npm run build`.
+4. Start the app: `npm run start:app`.
+
+### 4. Finalize GitHub App Setup
+1. Back in your GitHub App settings, set the **Webhook URL** to your deployed app's URL (e.g., `https://your-app.com/`).
+2. Ensure **Webhook** is set to **Active**.
+3. Install the app on your desired repositories.
+
 ---
 
 ## The Open Source Fight

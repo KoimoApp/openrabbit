@@ -1,0 +1,120 @@
+import 'dotenv/config';
+import express from 'express';
+import morgan from 'morgan';
+import { App } from '@octokit/app';
+import { createNodeMiddleware } from '@octokit/webhooks';
+import { runReview } from './reviewer.js';
+import type { ReviewLens, LLMProvider, ReviewMode, ToneMode } from './types.js';
+
+const requiredEnv = ['APP_ID', 'PRIVATE_KEY', 'WEBHOOK_SECRET', 'LLM_API_KEY'];
+for (const key of requiredEnv) {
+  if (!process.env[key]) {
+    console.error(`Missing required environment variable: ${key}`);
+    process.exit(1);
+  }
+}
+
+const appId = process.env.APP_ID!;
+const privateKey = process.env.PRIVATE_KEY!.replace(/\\n/g, '\n');
+const webhookSecret = process.env.WEBHOOK_SECRET!;
+
+const app = new App({
+  appId,
+  privateKey,
+  webhooks: {
+    secret: webhookSecret,
+  },
+});
+
+app.webhooks.on('pull_request.opened', handlePullRequest);
+app.webhooks.on('pull_request.reopened', handlePullRequest);
+app.webhooks.on('pull_request.synchronize', handlePullRequest);
+app.webhooks.on('pull_request.edited', handlePullRequest);
+
+async function handlePullRequest({ payload }: any) {
+  console.log(`Received pull_request event for ${payload.repository.full_name}#${payload.pull_request.number}`);
+
+  const repository = payload.repository;
+  const pullRequestNumber = payload.pull_request.number;
+
+  const llmProvider = (process.env.LLM_PROVIDER || 'openrouter') as LLMProvider;
+  const llmApiUrl = process.env.LLM_API_URL || 'https://openrouter.ai/api/v1';
+  const llmApiKey = process.env.LLM_API_KEY || '';
+  const llmModel = process.env.LLM_MODEL || 'openrouter/free';
+  const reviewMode = (process.env.REVIEW_MODE || 'both') as ReviewMode;
+  const toneMode = (process.env.TONE_MODE || 'balanced') as ToneMode;
+  const reviewLens = (process.env.REVIEW_LENS || 'default') as ReviewLens;
+  const debiasedMode = process.env.DEBIASED_MODE === 'true';
+
+  if (!llmApiKey) {
+    console.error('LLM_API_KEY is not set');
+    return;
+  }
+
+  // Get installation token
+  if (!payload.installation) {
+    console.error('No installation in payload');
+    return;
+  }
+  const installationId = payload.installation.id;
+
+  try {
+    const octokit = await app.getInstallationOctokit(installationId);
+    // Retrieve token for the review
+    const auth: any = await octokit.auth();
+    const token = auth.token;
+
+    await runReview({
+      owner: repository.owner.login,
+      repo: repository.name,
+      pullNumber: pullRequestNumber,
+      githubToken: token,
+      llmProvider,
+      llmApiUrl,
+      llmApiKey,
+      llmModel,
+      reviewMode,
+      toneMode,
+      reviewLens,
+      debiasedMode,
+    });
+    console.log(`Successfully reviewed ${payload.repository.full_name}#${payload.pull_request.number}`);
+  } catch (error) {
+    console.error(`Error reviewing ${payload.repository.full_name}#${payload.pull_request.number}:`, error);
+  }
+}
+
+const expressApp = express();
+const port = process.env.PORT || 3000;
+
+expressApp.use(morgan('combined'));
+
+expressApp.get('/health', (_req, res) => {
+  res.status(200).send('OK');
+});
+
+expressApp.use(createNodeMiddleware(app.webhooks, {
+  log: {
+    debug: console.log,
+    info: console.log,
+    warn: console.warn,
+    error: console.error,
+  } as any
+}));
+
+const server = expressApp.listen(port, () => {
+  console.log(`OpenRabbit GitHub App listening at http://localhost:${port}`);
+});
+
+const shutdown = () => {
+  console.log('Shutting down...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+  // Force close after 10s
+  setTimeout(() => process.exit(1), 10000);
+};
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
