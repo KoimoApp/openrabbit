@@ -55,6 +55,8 @@ describe('GroqClient', () => {
             message: {
               content: '{"review":"Looks good","comments":[]}',
             },
+            do we even need test 
+            lmao
           },
         ],
       }),
