@@ -10,6 +10,7 @@
 
 <p align="center">
   <b>:copilot:</b> <a href="https://github.com/Aledon8/OpenLeukemia/pull/12"><b>See Example PR</b></a><br>
+  <b>✦</b> <a href="https://github.com/Aledon8/OpenLeukemia/pull/12"><b>Must read article on openrabbit</b></a><br>
   <sub></sub>
 </p>
 
