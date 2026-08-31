@@ -918,6 +918,7 @@ export async function runReview(context: ReviewContext): Promise<void> {
     apiKey: context.llmApiKey,
     apiUrl: context.llmApiUrl,
     model: context.llmModel,
+    reasoningEffort: context.llmReasoningEffort,
   });
   const maxRounds = 2;
   async function fetchFileContent(path: string): Promise<string | null> {

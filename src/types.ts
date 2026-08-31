@@ -6,6 +6,7 @@ export interface LLMConfig {
   apiKey: string;
   apiUrl: string;
   model: string;
+  reasoningEffort: string;
 }
 export type ReviewCommentType = 'bug' | 'scope-drift' | 'reuse' | 'security' | 'question' | 'suggestion' | 'style';
 export interface ReviewSummary {
@@ -39,6 +40,7 @@ export interface ReviewContext {
   llmApiUrl: string;
   llmApiKey: string;
   llmModel: string;
+  llmReasoningEffort: string;
   reviewMode: ReviewMode;
   toneMode: ToneMode;
   reviewLens: ReviewLens;

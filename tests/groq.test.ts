@@ -33,6 +33,7 @@ describe('GroqClient', () => {
       apiKey: 'test-key',
       apiUrl: 'https://api.groq.com/openai/v1',
       model: 'openai/gpt-oss-120b',
+      reasoningEffort: 'low',
     });
 
     const response = await client.complete('Review this');
@@ -40,7 +41,10 @@ describe('GroqClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.groq.com/openai/v1/chat/completions',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('"reasoning_effort":"low"'),
+      }),
     );
     expect(response.summary.overview).toBe('Looks good');
     expect(response.comments).toEqual([]);
@@ -64,6 +68,7 @@ describe('GroqClient', () => {
       apiKey: 'test-key',
       apiUrl: 'https://api.groq.com/openai',
       model: 'openai/gpt-oss-120b',
+      reasoningEffort: 'medium',
     });
 
     await client.complete('Review this');
@@ -88,6 +93,7 @@ describe('GroqClient', () => {
       apiKey: 'test-key',
       apiUrl: 'https://api.groq.com/openai',
       model: 'openai/gpt-oss-120b',
+      reasoningEffort: 'medium',
     });
 
     await expect(client.complete('Review this')).rejects.toThrow(

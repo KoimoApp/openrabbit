@@ -203,11 +203,13 @@ export class GroqClient implements LLMClient {
   readonly apiKey: string;
   readonly apiUrl: string;
   readonly model: string;
+  readonly reasoningEffort: string;
 
   constructor(config: LLMConfig) {
     this.apiKey = config.apiKey;
     this.apiUrl = config.apiUrl.replace(/\/$/, '');
     this.model = config.model;
+    this.reasoningEffort = config.reasoningEffort;
   }
 
   private buildEndpoints(): string[] {
@@ -234,7 +236,7 @@ export class GroqClient implements LLMClient {
       temperature: 1,
       max_completion_tokens: 8192,
       top_p: 1,
-      reasoning_effort: 'medium',
+      reasoning_effort: this.reasoningEffort,
       stream: false,
     };
   }
