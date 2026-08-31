@@ -1,8 +1,8 @@
 import { GroqClient } from './groq.js';
-import type { LLMConfig, LLMProvider, ReviewResponse } from '../types.js';
+import type { LLMCompletionOptions, LLMConfig, LLMProvider, ReviewResponse } from '../types.js';
 
 export interface LLMClient {
-  complete(prompt: string): Promise<ReviewResponse>;
+  complete(prompt: string, options?: LLMCompletionOptions): Promise<ReviewResponse>;
 }
 
 export function createLLMClient(provider: LLMProvider, config: LLMConfig): LLMClient {

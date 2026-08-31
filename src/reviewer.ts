@@ -140,6 +140,27 @@ const LARGE_DIFF_LINE_THRESHOLD = 1000;
 const MAX_GROUP_PATCH_LINES = 500;
 const MAX_PASS_SUMMARY_CHARS = 4000;
 const REVIEW_LENS_VALUES: ReviewLens[] = ['default', 'security', 'socratic', 'performance', 'scope-guard'];
+
+function withReviewAbort<T>(operation: Promise<T>, signal: AbortSignal, message: string): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(new Error(message));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new Error(message));
+    signal.addEventListener('abort', onAbort, { once: true });
+    operation.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 const REVIEW_LENS_INSTRUCTIONS: Record<ReviewLens, string> = {
   default: '',
   security: 'Ignore the PR title and description for the first assessment. Focus strictly on the code diff. Look for OWASP Top 10 vulnerabilities, including SQL injection, XSS, and broken authentication. Specifically, watch for security theater—changes that claim to improve security in the metadata but actually remove validation logic. If the code removes a check, verify that a stronger or equal check has been added elsewhere.',
@@ -730,7 +751,7 @@ function hasLogicChange(patch: string | null): boolean {
   return false;
 }
 
-async function fetchPullRequestFiles(octokit: Octokit, owner: string, repo: string, pull_number: number) {
+async function fetchPullRequestFiles(octokit: Octokit, owner: string, repo: string, pull_number: number, signal: AbortSignal, deadline: number) {
   const changedFiles: ChangedFile[] = [];
   const skippedFiles: string[] = [];
   for await (const response of octokit.paginate.iterator(octokit.rest.pulls.listFiles, {
@@ -738,7 +759,11 @@ async function fetchPullRequestFiles(octokit: Octokit, owner: string, repo: stri
     repo,
     pull_number,
     per_page: 100,
+    request: { signal },
   })) {
+    if (signal.aborted || Date.now() >= deadline) {
+      throw new Error('Review deadline exhausted while reading pull request files.');
+    }
     for (const file of response.data) {
       const changedFile = { path: file.filename, patch: file.patch ?? null };
       if (shouldSkipFile(changedFile.path) || !hasLogicChange(changedFile.patch)) {
@@ -769,38 +794,56 @@ function extractLinkedIssueNumbers(owner: string, repo: string, body: string | n
   return Array.from(issueNumbers).filter((value) => Number.isInteger(value) && value > 0).slice(0, 3);
 }
 
-async function fetchLinkedIssues(octokit: Octokit, owner: string, repo: string, body: string | null): Promise<LinkedIssue[]> {
+async function fetchLinkedIssues(octokit: Octokit, owner: string, repo: string, body: string | null, signal: AbortSignal, deadline: number): Promise<LinkedIssue[]> {
   const issueNumbers = extractLinkedIssueNumbers(owner, repo, body);
   const linkedIssues: LinkedIssue[] = [];
   for (const issueNumber of issueNumbers) {
     try {
-      const { data } = await octokit.rest.issues.get({
-        owner,
-        repo,
-        issue_number: issueNumber,
-      });
+      const { data } = await withReviewAbort(
+        octokit.rest.issues.get({
+          owner,
+          repo,
+          issue_number: issueNumber,
+          request: { signal },
+        }),
+        signal,
+        'Review deadline exhausted while reading linked issues.',
+      );
       linkedIssues.push({
         number: data.number,
         title: data.title,
         body: data.body ?? null,
         state: data.state,
       });
-    } catch {
+    } catch (error) {
+      if (signal.aborted || Date.now() >= deadline) {
+        throw error;
+      }
       // Ignore individual issue lookup failures so the review can still proceed.
     }
   }
   return linkedIssues;
 }
 
-async function collectRepositoryFiles(rootDir: string): Promise<string[]> {
+async function collectRepositoryFiles(rootDir: string, signal: AbortSignal): Promise<string[]> {
   const results: string[] = [];
 
   async function walk(currentDir: string): Promise<void> {
+    if (signal.aborted) {
+      throw new Error('Review deadline exhausted while collecting repository files.');
+    }
     if (results.length >= MAX_REPOSITORY_FILES) {
       return;
     }
 
-    const entries = await fs.readdir(currentDir, { withFileTypes: true });
+    const entries = await withReviewAbort(
+      fs.readdir(currentDir, { withFileTypes: true }),
+      signal,
+      'Review deadline exhausted while collecting repository files.',
+    );
+    if (signal.aborted) {
+      throw new Error('Review deadline exhausted while collecting repository files.');
+    }
     entries.sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
       if (results.length >= MAX_REPOSITORY_FILES) {
@@ -878,17 +921,44 @@ function formatCommentBody(comment: ReviewComment): string {
 }
 
 export async function runReview(context: ReviewContext): Promise<void> {
+  const reviewTimeoutMs = context.reviewTimeoutMs ?? 900_000;
+  const reviewDeadline = Date.now() + reviewTimeoutMs;
+  const reviewController = new AbortController();
+  const reviewTimer = setTimeout(() => reviewController.abort(), Math.max(0, reviewTimeoutMs));
+  try {
+    await runReviewWithDeadline(context, reviewController.signal, reviewDeadline, reviewTimeoutMs);
+  } catch (error) {
+    if (reviewController.signal.aborted || Date.now() >= reviewDeadline) {
+      throw new Error(`Review deadline exhausted after ${reviewTimeoutMs}ms.`, { cause: error });
+    }
+    throw error;
+  } finally {
+    clearTimeout(reviewTimer);
+  }
+}
+
+async function runReviewWithDeadline(
+  context: ReviewContext,
+  reviewSignal: AbortSignal,
+  reviewDeadline: number,
+  reviewTimeoutMs: number,
+): Promise<void> {
   const octokit = new Octokit({ auth: context.githubToken });
-  const { data: pullRequest } = await octokit.rest.pulls.get({
-    owner: context.owner,
-    repo: context.repo,
-    pull_number: context.pullNumber,
-  });
+  const { data: pullRequest } = await withReviewAbort(
+    octokit.rest.pulls.get({
+      owner: context.owner,
+      repo: context.repo,
+      pull_number: context.pullNumber,
+      request: { signal: reviewSignal },
+    }),
+    reviewSignal,
+    'Review deadline exhausted while reading pull request metadata.',
+  );
 
   const [{ changedFiles, skippedFiles }, linkedIssues, repositoryFiles] = await Promise.all([
-    fetchPullRequestFiles(octokit, context.owner, context.repo, context.pullNumber),
-    fetchLinkedIssues(octokit, context.owner, context.repo, pullRequest.body),
-    collectRepositoryFiles(process.cwd()),
+    fetchPullRequestFiles(octokit, context.owner, context.repo, context.pullNumber, reviewSignal, reviewDeadline),
+    fetchLinkedIssues(octokit, context.owner, context.repo, pullRequest.body, reviewSignal, reviewDeadline),
+    collectRepositoryFiles(process.cwd(), reviewSignal),
   ]);
 
   // Detect Dependabot PRs and set a concise, lockfile-focused instruction
@@ -929,7 +999,11 @@ export async function runReview(context: ReviewContext): Promise<void> {
   const maxRounds = 2;
   async function fetchFileContent(path: string): Promise<string | null> {
     try {
-      const { data } = await octokit.rest.repos.getContent({ owner: context.owner, repo: context.repo, path, ref: pullRequest.head.sha });
+      const { data } = await withReviewAbort(
+        octokit.rest.repos.getContent({ owner: context.owner, repo: context.repo, path, ref: pullRequest.head.sha, request: { signal: reviewSignal } }),
+        reviewSignal,
+        'Review deadline exhausted while reading requested file content.',
+      );
       if (!('content' in (data as any)) || typeof (data as any).content !== 'string') {
         return null;
       }
@@ -939,7 +1013,10 @@ export async function runReview(context: ReviewContext): Promise<void> {
         return raw.slice(0, MAX_CHARS) + '\n... [truncated]';
       }
       return raw;
-    } catch {
+    } catch (error) {
+      if (reviewSignal.aborted || Date.now() >= reviewDeadline) {
+        throw error;
+      }
       return null;
     }
   }
@@ -970,7 +1047,21 @@ export async function runReview(context: ReviewContext): Promise<void> {
       metadataNote,
       languageLenses,
     } = options;
-    let response = await client.complete(buildReviewPrompt({
+    const complete = async (prompt: string): Promise<ReviewResponse> => {
+      const remainingMs = reviewDeadline - Date.now();
+      if (remainingMs <= 0 || reviewSignal.aborted) {
+        throw new Error(`Review deadline exhausted before the next LLM completion (limit ${reviewTimeoutMs}ms).`);
+      }
+      try {
+        return await client.complete(prompt, { timeoutMs: remainingMs });
+      } catch (error) {
+        if (reviewSignal.aborted || Date.now() >= reviewDeadline) {
+          throw new Error(`Review deadline exhausted during LLM completion (limit ${reviewTimeoutMs}ms).`, { cause: error });
+        }
+        throw error;
+      }
+    };
+    let response = await complete(buildReviewPrompt({
       title,
       body,
       linkedIssues,
@@ -1001,7 +1092,7 @@ export async function runReview(context: ReviewContext): Promise<void> {
 
       if (!followupFiles.length) break;
 
-      response = await client.complete(buildReviewPrompt({
+      response = await complete(buildReviewPrompt({
         title,
         body,
         linkedIssues,
@@ -1079,9 +1170,27 @@ export async function runReview(context: ReviewContext): Promise<void> {
       metadataNote: debiasedNote,
       languageLenses: baseLanguageLenses,
     });
-    summary = response.summary;
-    allComments = response.comments;
-    separatePrSuggestions = response.separatePrSuggestions;
+    if (debiasedMode) {
+      const synthesisResponse = await runReviewPass({
+        title: pullRequest.title,
+        body: pullRequest.body,
+        changedFiles,
+        reviewMode: 'summary',
+        toneMode: context.toneMode,
+        includePatches: false,
+        multiPassContext: 'Final metadata-aware synthesis pass for the complete PR. Reconcile the initial diff-only review with the PR title and description. Do not add new inline comments.',
+        priorSummaries: buildPassSummary('complete PR', response.summary, response.separatePrSuggestions),
+        metadataNote: synthesisNote,
+        languageLenses: baseLanguageLenses,
+      });
+      summary = synthesisResponse.summary;
+      allComments = response.comments;
+      separatePrSuggestions = uniqueStrings([...response.separatePrSuggestions, ...synthesisResponse.separatePrSuggestions]);
+    } else {
+      summary = response.summary;
+      allComments = response.comments;
+      separatePrSuggestions = response.separatePrSuggestions;
+    }
   }
 
   const reviewBody = renderSummaryMarkdown(summary, separatePrSuggestions);
@@ -1095,7 +1204,11 @@ export async function runReview(context: ReviewContext): Promise<void> {
 
   async function suggestionLooksRelevant(path: string, suggestion: string): Promise<boolean> {
     try {
-      const { data } = await octokit.rest.repos.getContent({ owner: context.owner, repo: context.repo, path, ref: pullRequest.head.sha });
+      const { data } = await withReviewAbort(
+        octokit.rest.repos.getContent({ owner: context.owner, repo: context.repo, path, ref: pullRequest.head.sha, request: { signal: reviewSignal } }),
+        reviewSignal,
+        'Review deadline exhausted while reading comment file content.',
+      );
       if (!('content' in (data as any)) || typeof (data as any).content !== 'string') return false;
       const raw = Buffer.from((data as any).content, 'base64').toString('utf8').toLowerCase();
       const tokens = suggestion.split(/\W+/).filter(Boolean).map((t) => t.toLowerCase()).filter((t) => t.length > 2);
@@ -1103,7 +1216,10 @@ export async function runReview(context: ReviewContext): Promise<void> {
         if (raw.includes(t)) return true;
       }
       return false;
-    } catch {
+    } catch (error) {
+      if (reviewSignal.aborted || Date.now() >= reviewDeadline) {
+        throw error;
+      }
       return false;
     }
   }
@@ -1162,5 +1278,12 @@ export async function runReview(context: ReviewContext): Promise<void> {
     createParams.comments = mappedComments.map((c) => ({ path: c.path, position: c.position, body: c.body }));
   }
 
-  await octokit.rest.pulls.createReview(createParams as any);
+  if (reviewSignal.aborted || Date.now() >= reviewDeadline) {
+    throw new Error(`Review deadline exhausted before posting the review (limit ${reviewTimeoutMs}ms).`);
+  }
+  await withReviewAbort(
+    octokit.rest.pulls.createReview({ ...createParams, request: { signal: reviewSignal } } as any),
+    reviewSignal,
+    'Review deadline exhausted while posting the review.',
+  );
 }

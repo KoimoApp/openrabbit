@@ -10,6 +10,10 @@ export interface LLMConfig {
   /** Maximum time allowed for each provider request, in milliseconds. */
   requestTimeoutMs?: number;
 }
+export interface LLMCompletionOptions {
+  /** Maximum time allowed for this completion, in milliseconds. */
+  timeoutMs?: number;
+}
 export type ReviewCommentType = 'bug' | 'scope-drift' | 'reuse' | 'security' | 'question' | 'suggestion' | 'style';
 export interface ReviewSummary {
   verdict?: string;
@@ -44,6 +48,8 @@ export interface ReviewContext {
   llmModel: string;
   llmReasoningEffort: string;
   requestTimeoutMs?: number;
+  /** Maximum time allowed for the complete review, in milliseconds. */
+  reviewTimeoutMs?: number;
   reviewMode: ReviewMode;
   toneMode: ToneMode;
   reviewLens: ReviewLens;

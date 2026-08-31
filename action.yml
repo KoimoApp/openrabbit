@@ -27,6 +27,10 @@ inputs:
     description: Maximum time for each LLM request, in milliseconds (1000-600000)
     required: false
     default: '120000'
+  review_timeout_ms:
+    description: Maximum total time for the complete PR review, in milliseconds (1000-3600000)
+    required: false
+    default: '900000'
   review_mode:
     description: Create summary, inline comments, or both
     required: false
@@ -70,6 +74,7 @@ runs:
         LLM_MODEL: ${{ inputs.llm_model }}
         LLM_REASONING_EFFORT: ${{ inputs.llm_reasoning_effort }}
         REQUEST_TIMEOUT_MS: ${{ inputs.request_timeout_ms }}
+        REVIEW_TIMEOUT_MS: ${{ inputs.review_timeout_ms }}
         REVIEW_MODE: ${{ inputs.review_mode }}
         TONE_MODE: ${{ inputs.tone_mode }}
         REVIEW_LENS: ${{ inputs.review_lens }}
