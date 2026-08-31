@@ -31,6 +31,7 @@ async function run(): Promise<void> {
   const llmApiUrl = getInputValue('llm_api_url', process.env.LLM_API_URL ?? 'https://openrouter.ai/api/v1', 'LLM_API_URL') ?? 'https://openrouter.ai/api/v1';
   const llmApiKey = getInputValue('llm_api_key', process.env.LLM_API_KEY ?? '', 'LLM_API_KEY');
   const llmModel = getInputValue('llm_model', process.env.LLM_MODEL ?? 'openrouter/free', 'LLM_MODEL') ?? 'openrouter/free';
+  const llmReasoningEffort = getInputValue('llm_reasoning_effort', process.env.LLM_REASONING_EFFORT ?? 'medium', 'LLM_REASONING_EFFORT') ?? 'medium';
   const reviewMode = (getInputValue('review_mode', process.env.REVIEW_MODE ?? 'both', 'REVIEW_MODE') ?? 'both') as import('./types.js').ReviewMode;
   const toneMode = (getInputValue('tone_mode', process.env.TONE_MODE ?? 'balanced', 'TONE_MODE') ?? 'balanced') as import('./types.js').ToneMode;
   const reviewLens = normalizeReviewLens(getInputValue('review_lens', process.env.REVIEW_LENS ?? 'default', 'REVIEW_LENS') ?? 'default');
@@ -57,6 +58,7 @@ async function run(): Promise<void> {
     llmApiUrl,
     llmApiKey,
     llmModel,
+    llmReasoningEffort,
     reviewMode: reviewMode as import('./types.js').ReviewMode,
     toneMode,
     reviewLens,
