@@ -48,7 +48,7 @@ export interface ReviewContext {
   llmModel: string;
   llmReasoningEffort: string;
   requestTimeoutMs?: number;
-  /** Maximum time allowed for the complete review, in milliseconds. */
+  /** Maximum time allowed for the complete review, in milliseconds (defaults to 240000). */
   reviewTimeoutMs?: number;
   reviewMode: ReviewMode;
   toneMode: ToneMode;

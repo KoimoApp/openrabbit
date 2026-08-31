@@ -921,7 +921,7 @@ function formatCommentBody(comment: ReviewComment): string {
 }
 
 export async function runReview(context: ReviewContext): Promise<void> {
-  const reviewTimeoutMs = context.reviewTimeoutMs ?? 900_000;
+  const reviewTimeoutMs = context.reviewTimeoutMs ?? 240_000;
   const reviewDeadline = Date.now() + reviewTimeoutMs;
   const reviewController = new AbortController();
   const reviewTimer = setTimeout(() => reviewController.abort(), Math.max(0, reviewTimeoutMs));
@@ -1081,6 +1081,9 @@ async function runReviewWithDeadline(
     }));
     let round = 0;
     while (round < maxRounds && response.requestedFiles && response.requestedFiles.length) {
+      if (reviewDeadline - Date.now() <= 0 || reviewSignal.aborted) {
+        break;
+      }
       const uniquePaths = Array.from(new Set(response.requestedFiles.map((p) => p.replace(/^\//, ''))));
       const followupFiles: Array<{ path: string; content: string }> = [];
       for (const p of uniquePaths) {
