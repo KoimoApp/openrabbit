@@ -118,4 +118,60 @@ describe('GroqClient', () => {
     expect(Date.now() - started).toBeLessThan(500);
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
+
+  it('gives a retry only the remaining time from the total timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock
+        .mockImplementationOnce(() => new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('first endpoint failed')), 30);
+        }))
+        .mockImplementationOnce((_url: string, init: RequestInit) => new Promise((_, reject) => {
+          init.signal?.addEventListener('abort', () => reject(new Error('retry aborted')));
+        }));
+
+      const client = new GroqClient({
+        apiKey: 'test-key',
+        apiUrl: 'https://api.example.com',
+        model: 'example-model',
+        requestTimeoutMs: 50,
+      });
+
+      const completion = client.complete('Review this');
+      const rejection = expect(completion).rejects.toThrow('retry aborted');
+      await vi.advanceTimersByTimeAsync(30);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(19);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not start another endpoint after the total timeout expires', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockImplementationOnce((_url: string, init: RequestInit) => new Promise((_, reject) => {
+        init.signal?.addEventListener('abort', () => reject(new Error('request aborted')));
+      }));
+
+      const client = new GroqClient({
+        apiKey: 'test-key',
+        apiUrl: 'https://api.example.com',
+        model: 'example-model',
+        requestTimeoutMs: 50,
+      });
+
+      const completion = client.complete('Review this');
+      const rejection = expect(completion).rejects.toThrow('LLM request failed for all endpoints');
+      await vi.advanceTimersByTimeAsync(50);
+      await rejection;
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
