@@ -698,10 +698,15 @@ export function parseReviewResponse(text: string): ReviewResponse {
   }
 }
 
-function shouldSkipFile(filePath: string): boolean {
+export function shouldSkipFile(filePath: string): boolean {
   const normalized = filePath.replace(/\\/g, '/').toLowerCase();
   const segments = normalized.split('/');
-  if (normalized.endsWith('.min.js') || normalized.endsWith('.lock') || normalized.endsWith('package-lock.json')) {
+  if (
+    normalized.endsWith('.min.js')
+    || normalized.endsWith('.lock')
+    || normalized.endsWith('package-lock.json')
+    || /(?:^|\/)drizzle\/[^/]+\/meta\/\d+_snapshot\.json$/.test(normalized)
+  ) {
     return true;
   }
   return segments.includes('vendor') || segments.includes('node_modules') || segments.includes('dist') || segments.includes('generated');

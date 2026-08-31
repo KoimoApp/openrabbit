@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReviewPrompt, parseReviewResponse } from '../src/reviewer.js';
+import { buildReviewPrompt, parseReviewResponse, shouldSkipFile } from '../src/reviewer.js';
 
 describe('reviewer prompt', () => {
   it('generates a prompt with title and patch snippets', () => {
@@ -33,5 +33,12 @@ describe('review response parser', () => {
     const response = parseReviewResponse('Some review without JSON');
     expect(response.summary.overview).toBe('Some review without JSON');
     expect(response.comments).toEqual([]);
+  });
+});
+
+describe('generated files', () => {
+  it('skips Drizzle snapshots but keeps migrations reviewable', () => {
+    expect(shouldSkipFile('packages/database/drizzle/core/meta/0046_snapshot.json')).toBe(true);
+    expect(shouldSkipFile('packages/database/drizzle/core/0046_youthful_supernaut.sql')).toBe(false);
   });
 });
