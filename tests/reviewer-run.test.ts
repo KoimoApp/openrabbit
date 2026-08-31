@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ReviewResponse } from '../src/types.js';
 
-const { completeMock, createReviewMock } = vi.hoisted(() => ({
+const { completeMock, createReviewMock, pullsGetMock } = vi.hoisted(() => ({
   completeMock: vi.fn(),
   createReviewMock: vi.fn(),
+  pullsGetMock: vi.fn(),
 }));
 
 vi.mock('../src/llm/index.js', () => ({
@@ -14,14 +15,7 @@ vi.mock('@octokit/rest', () => ({
   Octokit: class {
     rest = {
       pulls: {
-        get: vi.fn(async () => ({
-          data: {
-            title: 'Ship the real feature',
-            body: 'Closes #42 and explains the user-facing behavior.',
-            head: { sha: 'abc123', ref: 'feature/real-feature' },
-            user: { login: 'contributor' },
-          },
-        })),
+        get: pullsGetMock,
         listFiles: vi.fn(),
         createReview: createReviewMock,
       },
@@ -43,6 +37,14 @@ vi.mock('@octokit/rest', () => ({
 
 describe('runReview debiased single-pass flow', () => {
   it('synthesizes metadata while preserving comments and combining suggestions', async () => {
+    pullsGetMock.mockReset().mockResolvedValue({
+      data: {
+        title: 'Ship the real feature',
+        body: 'Closes #42 and explains the user-facing behavior.',
+        head: { sha: 'abc123', ref: 'feature/real-feature' },
+        user: { login: 'contributor' },
+      },
+    });
     const initialResponse: ReviewResponse = {
       summary: { verdict: 'question', overview: 'Diff-only summary', reuseNotes: [], actionItems: [] },
       comments: [{ path: 'src/feature.ts', line: 1, body: 'Keep this behavior covered.', type: 'question' }],
@@ -90,5 +92,37 @@ describe('runReview debiased single-pass flow', () => {
     expect(postedReview.body).toContain('Initial suggestion');
     expect(postedReview.body).toContain('Synthesis suggestion');
     expect(postedReview.comments).toEqual([{ path: 'src/feature.ts', position: 1, body: '**question:** Keep this behavior covered.' }]);
+  });
+
+  it('rejects at the review deadline when an initial GitHub request stalls', async () => {
+    vi.useFakeTimers();
+    try {
+      pullsGetMock.mockReset().mockImplementation(() => new Promise(() => {}));
+      createReviewMock.mockReset();
+      const { runReview } = await import('../src/reviewer.js');
+      const review = runReview({
+        owner: 'owner',
+        repo: 'repo',
+        pullNumber: 7,
+        githubToken: 'github-token',
+        llmProvider: 'openrouter',
+        llmApiUrl: 'https://api.example.com/v1',
+        llmApiKey: 'llm-key',
+        llmModel: 'model',
+        llmReasoningEffort: 'medium',
+        requestTimeoutMs: 120_000,
+        reviewTimeoutMs: 40,
+        reviewMode: 'both',
+        toneMode: 'balanced',
+        reviewLens: 'default',
+        debiasedMode: false,
+      });
+      const rejection = expect(review).rejects.toThrow('Review deadline exhausted after 40ms');
+      await vi.advanceTimersByTimeAsync(40);
+      await rejection;
+      expect(createReviewMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
