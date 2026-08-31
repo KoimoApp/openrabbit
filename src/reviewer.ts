@@ -878,6 +878,7 @@ function formatCommentBody(comment: ReviewComment): string {
 }
 
 export async function runReview(context: ReviewContext): Promise<void> {
+  const reviewDeadline = Date.now() + (context.reviewTimeoutMs ?? 900_000);
   const octokit = new Octokit({ auth: context.githubToken });
   const { data: pullRequest } = await octokit.rest.pulls.get({
     owner: context.owner,
@@ -970,7 +971,21 @@ export async function runReview(context: ReviewContext): Promise<void> {
       metadataNote,
       languageLenses,
     } = options;
-    let response = await client.complete(buildReviewPrompt({
+    const complete = async (prompt: string): Promise<ReviewResponse> => {
+      const remainingMs = reviewDeadline - Date.now();
+      if (remainingMs <= 0) {
+        throw new Error(`Review deadline exhausted before the next LLM completion (limit ${context.reviewTimeoutMs ?? 900_000}ms).`);
+      }
+      try {
+        return await client.complete(prompt, { timeoutMs: remainingMs });
+      } catch (error) {
+        if (Date.now() >= reviewDeadline) {
+          throw new Error(`Review deadline exhausted during LLM completion (limit ${context.reviewTimeoutMs ?? 900_000}ms).`, { cause: error });
+        }
+        throw error;
+      }
+    };
+    let response = await complete(buildReviewPrompt({
       title,
       body,
       linkedIssues,
@@ -1001,7 +1016,7 @@ export async function runReview(context: ReviewContext): Promise<void> {
 
       if (!followupFiles.length) break;
 
-      response = await client.complete(buildReviewPrompt({
+      response = await complete(buildReviewPrompt({
         title,
         body,
         linkedIssues,
@@ -1079,9 +1094,27 @@ export async function runReview(context: ReviewContext): Promise<void> {
       metadataNote: debiasedNote,
       languageLenses: baseLanguageLenses,
     });
-    summary = response.summary;
-    allComments = response.comments;
-    separatePrSuggestions = response.separatePrSuggestions;
+    if (debiasedMode) {
+      const synthesisResponse = await runReviewPass({
+        title: pullRequest.title,
+        body: pullRequest.body,
+        changedFiles,
+        reviewMode: 'summary',
+        toneMode: context.toneMode,
+        includePatches: false,
+        multiPassContext: 'Final metadata-aware synthesis pass for the complete PR. Reconcile the initial diff-only review with the PR title and description. Do not add new inline comments.',
+        priorSummaries: buildPassSummary('complete PR', response.summary, response.separatePrSuggestions),
+        metadataNote: synthesisNote,
+        languageLenses: baseLanguageLenses,
+      });
+      summary = synthesisResponse.summary;
+      allComments = response.comments;
+      separatePrSuggestions = uniqueStrings([...response.separatePrSuggestions, ...synthesisResponse.separatePrSuggestions]);
+    } else {
+      summary = response.summary;
+      allComments = response.comments;
+      separatePrSuggestions = response.separatePrSuggestions;
+    }
   }
 
   const reviewBody = renderSummaryMarkdown(summary, separatePrSuggestions);

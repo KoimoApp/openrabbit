@@ -1,6 +1,6 @@
 import { fetch } from 'undici';
 import type { LLMClient } from './index.js';
-import type { LLMConfig, ReviewCommentType, ReviewResponse } from '../types.js';
+import type { LLMCompletionOptions, LLMConfig, ReviewCommentType, ReviewResponse } from '../types.js';
 
 const VALID_COMMENT_TYPES: ReviewCommentType[] = ['bug', 'scope-drift', 'reuse', 'security', 'question', 'suggestion', 'style'];
 
@@ -244,11 +244,15 @@ export class GroqClient implements LLMClient {
     };
   }
 
-  async complete(prompt: string): Promise<ReviewResponse> {
+  async complete(prompt: string, options: LLMCompletionOptions = {}): Promise<ReviewResponse> {
     const endpoints = this.buildEndpoints();
     const body = JSON.stringify(this.buildRequestBody(prompt));
     const failures: string[] = [];
-    const deadline = Date.now() + this.requestTimeoutMs;
+    const timeoutMs = options.timeoutMs ?? this.requestTimeoutMs;
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      throw new Error('LLM completion timeout must be greater than zero.');
+    }
+    const deadline = Date.now() + Math.min(this.requestTimeoutMs, timeoutMs);
 
     for (const url of endpoints) {
       const remainingMs = deadline - Date.now();

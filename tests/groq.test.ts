@@ -119,6 +119,32 @@ describe('GroqClient', () => {
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 
+  it('clamps a completion to the remaining review deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockImplementation((_url: string, init: RequestInit) => new Promise((_, reject) => {
+        init.signal?.addEventListener('abort', () => reject(new Error('review deadline reached')));
+      }));
+
+      const client = new GroqClient({
+        apiKey: 'test-key',
+        apiUrl: 'https://api.example.com/v1',
+        model: 'example-model',
+        reasoningEffort: 'medium',
+        requestTimeoutMs: 500,
+      });
+
+      const completion = client.complete('Review this', { timeoutMs: 40 });
+      const rejection = expect(completion).rejects.toThrow('review deadline reached');
+      await vi.advanceTimersByTimeAsync(39);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('gives a retry only the remaining time from the total timeout', async () => {
     vi.useFakeTimers();
     try {

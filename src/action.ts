@@ -25,6 +25,14 @@ function parseRequestTimeoutMs(value: string): number {
   return 120_000;
 }
 
+function parseReviewTimeoutMs(value: string): number {
+  const parsed = Number(value.trim());
+  if (Number.isFinite(parsed) && parsed >= 1_000 && parsed <= 3_600_000) {
+    return Math.floor(parsed);
+  }
+  return 900_000;
+}
+
 function normalizeReviewLens(value: string): import('./types.js').ReviewLens {
   const normalized = value.trim().toLowerCase();
   if (['default', 'security', 'socratic', 'performance', 'scope-guard'].includes(normalized)) {
@@ -41,6 +49,7 @@ async function run(): Promise<void> {
   const llmModel = getInputValue('llm_model', process.env.LLM_MODEL ?? 'openrouter/free', 'LLM_MODEL') ?? 'openrouter/free';
   const llmReasoningEffort = getInputValue('llm_reasoning_effort', process.env.LLM_REASONING_EFFORT ?? 'medium', 'LLM_REASONING_EFFORT') ?? 'medium';
   const requestTimeoutMs = parseRequestTimeoutMs(getInputValue('request_timeout_ms', process.env.REQUEST_TIMEOUT_MS ?? '120000', 'REQUEST_TIMEOUT_MS') ?? '120000');
+  const reviewTimeoutMs = parseReviewTimeoutMs(getInputValue('review_timeout_ms', process.env.REVIEW_TIMEOUT_MS ?? '900000', 'REVIEW_TIMEOUT_MS') ?? '900000');
   const reviewMode = (getInputValue('review_mode', process.env.REVIEW_MODE ?? 'both', 'REVIEW_MODE') ?? 'both') as import('./types.js').ReviewMode;
   const toneMode = (getInputValue('tone_mode', process.env.TONE_MODE ?? 'balanced', 'TONE_MODE') ?? 'balanced') as import('./types.js').ToneMode;
   const reviewLens = normalizeReviewLens(getInputValue('review_lens', process.env.REVIEW_LENS ?? 'default', 'REVIEW_LENS') ?? 'default');
@@ -68,6 +77,7 @@ async function run(): Promise<void> {
     llmApiKey,
     llmModel,
     requestTimeoutMs,
+    reviewTimeoutMs,
     llmReasoningEffort,
     reviewMode: reviewMode as import('./types.js').ReviewMode,
     toneMode,
