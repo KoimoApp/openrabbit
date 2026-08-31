@@ -100,4 +100,22 @@ describe('GroqClient', () => {
       'LLM request failed for all endpoints. Errors: request to https://api.groq.com/openai/v1/chat/completions failed: fetch failed | request to https://api.groq.com/openai/chat/completions failed: LLM API error 404 from https://api.groq.com/openai/chat/completions: {"error":"missing"}',
     );
   });
+
+  it('aborts a provider request after the configured timeout', async () => {
+    fetchMock.mockImplementation((_url: string, init: RequestInit) => new Promise((_, reject) => {
+      init.signal?.addEventListener('abort', () => reject(new Error('request aborted')));
+    }));
+
+    const client = new GroqClient({
+      apiKey: 'test-key',
+      apiUrl: 'https://api.example.com/v1',
+      model: 'example-model',
+      requestTimeoutMs: 25,
+    });
+
+    const started = Date.now();
+    await expect(client.complete('Review this')).rejects.toThrow('request aborted');
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
 });

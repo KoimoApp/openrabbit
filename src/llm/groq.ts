@@ -200,16 +200,19 @@ function describeFetchError(error: unknown): string {
 }
 
 export class GroqClient implements LLMClient {
+  private static readonly defaultRequestTimeoutMs = 120_000;
   readonly apiKey: string;
   readonly apiUrl: string;
   readonly model: string;
   readonly reasoningEffort: string;
+  readonly requestTimeoutMs: number;
 
   constructor(config: LLMConfig) {
     this.apiKey = config.apiKey;
     this.apiUrl = config.apiUrl.replace(/\/$/, '');
     this.model = config.model;
     this.reasoningEffort = config.reasoningEffort;
+    this.requestTimeoutMs = config.requestTimeoutMs ?? GroqClient.defaultRequestTimeoutMs;
   }
 
   private buildEndpoints(): string[] {
@@ -247,6 +250,8 @@ export class GroqClient implements LLMClient {
     const failures: string[] = [];
 
     for (const url of endpoints) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
       try {
         const response = await fetch(url, {
           method: 'POST',
@@ -255,6 +260,7 @@ export class GroqClient implements LLMClient {
             'Content-Type': 'application/json',
           },
           body,
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -267,6 +273,8 @@ export class GroqClient implements LLMClient {
         return parseReviewResponse(text);
       } catch (error) {
         failures.push(`request to ${url} failed: ${describeFetchError(error)}`);
+      } finally {
+        clearTimeout(timeout);
       }
     }
 

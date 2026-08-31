@@ -919,6 +919,7 @@ export async function runReview(context: ReviewContext): Promise<void> {
     apiUrl: context.llmApiUrl,
     model: context.llmModel,
     reasoningEffort: context.llmReasoningEffort,
+    requestTimeoutMs: context.requestTimeoutMs,
   });
   const maxRounds = 2;
   async function fetchFileContent(path: string): Promise<string | null> {
