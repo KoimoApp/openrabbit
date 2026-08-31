@@ -15,6 +15,11 @@ function parseBoolean(value: string): boolean {
   return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
+function parseRequestTimeoutMs(value: string): number {
+  const parsed = Number(value.trim());
+  return Number.isFinite(parsed) && parsed >= 1_000 && parsed <= 600_000 ? Math.floor(parsed) : 120_000;
+}
+
 function normalizeReviewLens(value: string): ReviewLens {
   const normalized = value.trim().toLowerCase();
   if (['default', 'security', 'socratic', 'performance', 'scope-guard'].includes(normalized)) {
@@ -33,6 +38,7 @@ async function main(): Promise<void> {
   const llmApiKey = getValue('llm-api-key', 'LLM_API_KEY');
   const llmModel = getValue('llm-model', 'LLM_MODEL', 'openrouter/free');
   const llmReasoningEffort = getValue('llm-reasoning-effort', 'LLM_REASONING_EFFORT', 'medium');
+  const requestTimeoutMs = parseRequestTimeoutMs(getValue('request-timeout-ms', 'REQUEST_TIMEOUT_MS', '120000'));
   const reviewMode = (getValue('review-mode', 'REVIEW_MODE', 'both') as ReviewMode);
   const toneMode = (getValue('tone-mode', 'TONE_MODE', 'balanced') as ToneMode);
   const reviewLens = normalizeReviewLens(getValue('review-lens', 'REVIEW_LENS', 'default'));
@@ -52,6 +58,7 @@ async function main(): Promise<void> {
     llmApiUrl,
     llmApiKey,
     llmModel,
+    requestTimeoutMs,
     llmReasoningEffort,
     reviewMode,
     toneMode,

@@ -7,6 +7,8 @@ export interface LLMConfig {
   apiUrl: string;
   model: string;
   reasoningEffort: string;
+  /** Maximum time allowed for each provider request, in milliseconds. */
+  requestTimeoutMs?: number;
 }
 export type ReviewCommentType = 'bug' | 'scope-drift' | 'reuse' | 'security' | 'question' | 'suggestion' | 'style';
 export interface ReviewSummary {
@@ -41,6 +43,7 @@ export interface ReviewContext {
   llmApiKey: string;
   llmModel: string;
   llmReasoningEffort: string;
+  requestTimeoutMs?: number;
   reviewMode: ReviewMode;
   toneMode: ToneMode;
   reviewLens: ReviewLens;

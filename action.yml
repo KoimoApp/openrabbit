@@ -23,6 +23,10 @@ inputs:
     description: Reasoning effort passed to compatible OpenAI chat-completions providers
     required: false
     default: medium
+  request_timeout_ms:
+    description: Maximum time for each LLM request, in milliseconds (1000-600000)
+    required: false
+    default: '120000'
   review_mode:
     description: Create summary, inline comments, or both
     required: false
@@ -65,6 +69,7 @@ runs:
         LLM_API_KEY: ${{ inputs.llm_api_key }}
         LLM_MODEL: ${{ inputs.llm_model }}
         LLM_REASONING_EFFORT: ${{ inputs.llm_reasoning_effort }}
+        REQUEST_TIMEOUT_MS: ${{ inputs.request_timeout_ms }}
         REVIEW_MODE: ${{ inputs.review_mode }}
         TONE_MODE: ${{ inputs.tone_mode }}
         REVIEW_LENS: ${{ inputs.review_lens }}
