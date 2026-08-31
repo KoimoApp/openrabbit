@@ -30,7 +30,7 @@ inputs:
   review_timeout_ms:
     description: Maximum total time for the complete PR review, in milliseconds (1000-3600000)
     required: false
-    default: '900000'
+    default: '240000'
   review_mode:
     description: Create summary, inline comments, or both
     required: false

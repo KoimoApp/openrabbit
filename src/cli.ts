@@ -22,7 +22,7 @@ function parseRequestTimeoutMs(value: string): number {
 
 function parseReviewTimeoutMs(value: string): number {
   const parsed = Number(value.trim());
-  return Number.isFinite(parsed) && parsed >= 1_000 && parsed <= 3_600_000 ? Math.floor(parsed) : 900_000;
+  return Number.isFinite(parsed) && parsed >= 1_000 && parsed <= 3_600_000 ? Math.floor(parsed) : 240_000;
 }
 
 function normalizeReviewLens(value: string): ReviewLens {
@@ -44,7 +44,7 @@ async function main(): Promise<void> {
   const llmModel = getValue('llm-model', 'LLM_MODEL', 'openrouter/free');
   const llmReasoningEffort = getValue('llm-reasoning-effort', 'LLM_REASONING_EFFORT', 'medium');
   const requestTimeoutMs = parseRequestTimeoutMs(getValue('request-timeout-ms', 'REQUEST_TIMEOUT_MS', '120000'));
-  const reviewTimeoutMs = parseReviewTimeoutMs(getValue('review-timeout-ms', 'REVIEW_TIMEOUT_MS', '900000'));
+  const reviewTimeoutMs = parseReviewTimeoutMs(getValue('review-timeout-ms', 'REVIEW_TIMEOUT_MS', '240000'));
   const reviewMode = (getValue('review-mode', 'REVIEW_MODE', 'both') as ReviewMode);
   const toneMode = (getValue('tone-mode', 'TONE_MODE', 'balanced') as ToneMode);
   const reviewLens = normalizeReviewLens(getValue('review-lens', 'REVIEW_LENS', 'default'));

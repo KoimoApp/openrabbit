@@ -125,4 +125,67 @@ describe('runReview debiased single-pass flow', () => {
       vi.useRealTimers();
     }
   });
+
+  it('passes only the remaining review budget to a requested-file round', async () => {
+    try {
+      pullsGetMock.mockReset().mockResolvedValue({
+        data: {
+          title: 'Review a change',
+          body: null,
+          head: { sha: 'abc123', ref: 'feature/change' },
+          user: { login: 'contributor' },
+        },
+      });
+      createReviewMock.mockReset().mockResolvedValue({});
+      const initialResponse: ReviewResponse = {
+        summary: { overview: 'Initial review', reuseNotes: [], actionItems: [] },
+        comments: [],
+        separatePrSuggestions: [],
+        requestedFiles: ['src/feature.ts'],
+      };
+      const finalResponse: ReviewResponse = {
+        summary: { overview: 'Final review', reuseNotes: [], actionItems: [] },
+        comments: [],
+        separatePrSuggestions: [],
+      };
+      const completionTimeouts: number[] = [];
+      completeMock.mockReset().mockImplementation(async (_prompt: string, options: { timeoutMs?: number }) => {
+        completionTimeouts.push(options.timeoutMs ?? 0);
+        if (completionTimeouts.length === 1) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 25));
+          return initialResponse;
+        }
+        return finalResponse;
+      });
+
+      const { runReview } = await import('../src/reviewer.js');
+      const review = runReview({
+        owner: 'owner',
+        repo: 'repo',
+        pullNumber: 7,
+        githubToken: 'github-token',
+        llmProvider: 'openrouter',
+        llmApiUrl: 'https://api.example.com/v1',
+        llmApiKey: 'llm-key',
+        llmModel: 'model',
+        llmReasoningEffort: 'medium',
+        requestTimeoutMs: 120_000,
+        reviewTimeoutMs: 1_000,
+        reviewMode: 'both',
+        toneMode: 'balanced',
+        reviewLens: 'default',
+        debiasedMode: false,
+      });
+
+      await review;
+
+      expect(completionTimeouts).toHaveLength(2);
+      expect(completionTimeouts[0]).toBeLessThanOrEqual(1_000);
+      expect(completionTimeouts[0]).toBeGreaterThan(0);
+      expect(completionTimeouts[1]).toBeLessThan(completionTimeouts[0]);
+      expect(completionTimeouts[1]).toBeGreaterThan(0);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
 });
