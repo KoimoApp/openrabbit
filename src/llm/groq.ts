@@ -248,10 +248,16 @@ export class GroqClient implements LLMClient {
     const endpoints = this.buildEndpoints();
     const body = JSON.stringify(this.buildRequestBody(prompt));
     const failures: string[] = [];
+    const deadline = Date.now() + this.requestTimeoutMs;
 
     for (const url of endpoints) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        break;
+      }
+
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+      const timeout = setTimeout(() => controller.abort(), remainingMs);
       try {
         const response = await fetch(url, {
           method: 'POST',
