@@ -1,4 +1,3 @@
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { Octokit } from '@octokit/rest';
 import { createLLMClient } from './llm/index.js';
@@ -135,6 +134,8 @@ interface LinkedIssue {
 
 const MAX_PATCH_LENGTH = 4000;
 const MAX_REPOSITORY_FILES = 200;
+const REPOSITORY_FILE_PATTERN = /\.(ts|tsx|js|jsx|json|ya?ml|md)$/i;
+const IGNORED_REPOSITORY_SEGMENTS = new Set(['.git', 'node_modules', 'dist', 'vendor']);
 const VALID_COMMENT_TYPES: ReviewCommentType[] = ['bug', 'scope-drift', 'reuse', 'security', 'question', 'suggestion', 'style'];
 const LARGE_DIFF_LINE_THRESHOLD = 1000;
 const MAX_GROUP_PATCH_LINES = 500;
@@ -825,56 +826,36 @@ async function fetchLinkedIssues(octokit: Octokit, owner: string, repo: string, 
   return linkedIssues;
 }
 
-async function collectRepositoryFiles(rootDir: string, signal: AbortSignal): Promise<string[]> {
-  const results: string[] = [];
+export function filterRepositoryTreePaths(entries: Array<{ path?: string; type?: string }>): string[] {
+  return entries
+    .filter((entry): entry is { path: string; type: string } => entry.type === 'blob' && typeof entry.path === 'string')
+    .map((entry) => entry.path)
+    .filter((filePath) => REPOSITORY_FILE_PATTERN.test(filePath))
+    .filter((filePath) => !filePath.split('/').some((segment) => IGNORED_REPOSITORY_SEGMENTS.has(segment)))
+    .sort((left, right) => left.localeCompare(right))
+    .slice(0, MAX_REPOSITORY_FILES);
+}
 
-  async function walk(currentDir: string): Promise<void> {
-    if (signal.aborted) {
-      throw new Error('Review deadline exhausted while collecting repository files.');
-    }
-    if (results.length >= MAX_REPOSITORY_FILES) {
-      return;
-    }
-
-    const entries = await withReviewAbort(
-      fs.readdir(currentDir, { withFileTypes: true }),
+async function collectRepositoryFiles(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  ref: string,
+  signal: AbortSignal,
+): Promise<string[]> {
+  try {
+    const { data } = await withReviewAbort(
+      octokit.rest.git.getTree({ owner, repo, tree_sha: ref, recursive: 'true', request: { signal } }),
       signal,
       'Review deadline exhausted while collecting repository files.',
     );
+    return filterRepositoryTreePaths(data.tree ?? []);
+  } catch (error) {
     if (signal.aborted) {
-      throw new Error('Review deadline exhausted while collecting repository files.');
+      throw error;
     }
-    entries.sort((left, right) => left.name.localeCompare(right.name));
-    for (const entry of entries) {
-      if (results.length >= MAX_REPOSITORY_FILES) {
-        return;
-      }
-
-      const absolutePath = path.join(currentDir, entry.name);
-      const relativePath = path.relative(rootDir, absolutePath).replace(/\\/g, '/');
-      if (!relativePath) {
-        continue;
-      }
-
-      const normalized = relativePath.toLowerCase();
-      if (entry.isDirectory()) {
-        if (normalized === '.git' || normalized === 'node_modules' || normalized === 'dist' || normalized === 'vendor') {
-          continue;
-        }
-        await walk(absolutePath);
-        continue;
-      }
-
-      if (!/\.(ts|tsx|js|jsx|json|ya?ml|md)$/i.test(entry.name)) {
-        continue;
-      }
-
-      results.push(relativePath);
-    }
+    return [];
   }
-
-  await walk(rootDir);
-  return results;
 }
 
 function renderSummaryMarkdown(summary: ReviewSummary, separatePrSuggestions: string[]): string {
@@ -955,10 +936,15 @@ async function runReviewWithDeadline(
     'Review deadline exhausted while reading pull request metadata.',
   );
 
+  const head = (pullRequest.head ?? {}) as { sha?: string; repo?: { full_name?: string } | null };
+  const headSha = head.sha ?? '';
+  const headFullName = head.repo?.full_name ?? `${context.owner}/${context.repo}`;
+  const [headOwner, headRepoName] = headFullName.split('/');
+
   const [{ changedFiles, skippedFiles }, linkedIssues, repositoryFiles] = await Promise.all([
     fetchPullRequestFiles(octokit, context.owner, context.repo, context.pullNumber, reviewSignal, reviewDeadline),
     fetchLinkedIssues(octokit, context.owner, context.repo, pullRequest.body, reviewSignal, reviewDeadline),
-    collectRepositoryFiles(process.cwd(), reviewSignal),
+    collectRepositoryFiles(octokit, headOwner, headRepoName, headSha, reviewSignal),
   ]);
 
   // Detect Dependabot PRs and set a concise, lockfile-focused instruction
@@ -1000,7 +986,7 @@ async function runReviewWithDeadline(
   async function fetchFileContent(path: string): Promise<string | null> {
     try {
       const { data } = await withReviewAbort(
-        octokit.rest.repos.getContent({ owner: context.owner, repo: context.repo, path, ref: pullRequest.head.sha, request: { signal: reviewSignal } }),
+        octokit.rest.repos.getContent({ owner: headOwner, repo: headRepoName, path, ref: headSha, request: { signal: reviewSignal } }),
         reviewSignal,
         'Review deadline exhausted while reading requested file content.',
       );
@@ -1208,7 +1194,7 @@ async function runReviewWithDeadline(
   async function suggestionLooksRelevant(path: string, suggestion: string): Promise<boolean> {
     try {
       const { data } = await withReviewAbort(
-        octokit.rest.repos.getContent({ owner: context.owner, repo: context.repo, path, ref: pullRequest.head.sha, request: { signal: reviewSignal } }),
+        octokit.rest.repos.getContent({ owner: headOwner, repo: headRepoName, path, ref: headSha, request: { signal: reviewSignal } }),
         reviewSignal,
         'Review deadline exhausted while reading comment file content.',
       );
