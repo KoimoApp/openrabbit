@@ -48,34 +48,5 @@ inputs:
     required: false
     default: "false"
 runs:
-  using: composite
-  steps:
-    - name: Setup Node
-      uses: actions/setup-node@v5
-      with:
-        node-version: '20'
-    - name: Install dependencies
-      run: npm install
-      shell: bash
-      working-directory: ${{ github.action_path }}
-    - name: Build action
-      run: npm run build
-      shell: bash
-      working-directory: ${{ github.action_path }}
-    - name: Run Coderabbit reviewer
-      run: node dist/action.js
-      shell: bash
-      working-directory: ${{ github.action_path }}
-      env:
-        GITHUB_TOKEN: ${{ inputs.github_token }}
-        LLM_PROVIDER: ${{ inputs.llm_provider }}
-        LLM_API_URL: ${{ inputs.llm_api_url }}
-        LLM_API_KEY: ${{ inputs.llm_api_key }}
-        LLM_MODEL: ${{ inputs.llm_model }}
-        LLM_REASONING_EFFORT: ${{ inputs.llm_reasoning_effort }}
-        REQUEST_TIMEOUT_MS: ${{ inputs.request_timeout_ms }}
-        REVIEW_TIMEOUT_MS: ${{ inputs.review_timeout_ms }}
-        REVIEW_MODE: ${{ inputs.review_mode }}
-        TONE_MODE: ${{ inputs.tone_mode }}
-        REVIEW_LENS: ${{ inputs.review_lens }}
-        DEBIASED_MODE: ${{ inputs.debiased_mode }}
+  using: node24
+  main: dist/index.js

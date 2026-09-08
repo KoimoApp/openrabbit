@@ -1,23 +1,42 @@
-name: OpenRabbit Reviewer
+name: OpenRabbit pull request validation
 
 on:
-  pull_request_target:
-    types: [opened, reopened, edited, synchronize]
+  pull_request:
+    types: [opened, reopened, edited, synchronize, ready_for_review]
 
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 
 jobs:
-  review:
+  validate:
+    if: github.event.pull_request.draft == false
+    name: Validate action
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: OpenRabbit
-        uses: aryan6673/openrabbit@main
+      - name: Check out the pull request merge ref
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          llm_api_key: ${{ secrets.LLM_API_KEY }}
-          llm_provider: openrouter # Or groq
-          llm_model: openrouter/free # Use world-class models for $0
-          review_mode: both
-          tone_mode: balanced
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Test and build
+        run: |
+          npm test
+          npm run build
+
+      - name: Require the committed action bundle to be current
+        run: git diff --exit-code -- dist/index.js
