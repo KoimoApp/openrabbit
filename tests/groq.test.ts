@@ -47,8 +47,28 @@ describe('GroqClient', () => {
       }),
     );
     expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"max_completion_tokens":2048');
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"thinking":{"type":"disabled"}');
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"response_format":{"type":"json_object"}');
     expect(response.summary.overview).toBe('Looks good');
     expect(response.comments).toEqual([]);
+  });
+
+  it('rejects malformed model output instead of publishing it as a review', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Let me work through this carefully...' } }],
+      }),
+    });
+
+    const client = new GroqClient({
+      apiKey: 'test-key',
+      apiUrl: 'https://api.example.com/v1',
+      model: 'z-ai/glm-5.3-flash',
+      reasoningEffort: 'low',
+    });
+
+    await expect(client.complete('Review this')).rejects.toThrow('LLM response was not valid JSON.');
   });
 
   it('prepends /v1 when the configured base URL omits it', async () => {
