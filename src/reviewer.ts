@@ -138,7 +138,7 @@ const REPOSITORY_FILE_PATTERN = /\.(ts|tsx|js|jsx|json|ya?ml|md)$/i;
 const IGNORED_REPOSITORY_SEGMENTS = new Set(['.git', 'node_modules', 'dist', 'vendor']);
 const VALID_COMMENT_TYPES: ReviewCommentType[] = ['bug', 'scope-drift', 'reuse', 'security', 'question', 'suggestion', 'style'];
 const LARGE_DIFF_LINE_THRESHOLD = 1000;
-const MAX_GROUP_PATCH_LINES = 300;
+const MAX_GROUP_PATCH_LINES = 150;
 const MAX_PASS_SUMMARY_CHARS = 4000;
 const REVIEW_LENS_VALUES: ReviewLens[] = ['default', 'security', 'socratic', 'performance', 'scope-guard'];
 
