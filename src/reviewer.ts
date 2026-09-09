@@ -499,53 +499,23 @@ function totalPatchLines(changedFiles: ChangedFile[]): number {
   return changedFiles.reduce((total, file) => total + countPatchLines(file.patch), 0);
 }
 
-function buildGroupLabel(key: string): string {
-  const [segment, ext] = key.split(':');
-  if (ext === 'noext') {
-    return `${segment} files`;
-  }
-  return `${segment} ${ext} files`;
-}
-
-function buildReviewGroups(changedFiles: ChangedFile[]): Array<{ label: string; files: ChangedFile[] }> {
-  const grouped = new Map<string, ChangedFile[]>();
-  for (const file of changedFiles) {
-    const normalizedPath = file.path.replace(/\\/g, '/');
-    const parts = normalizedPath.split('/');
-    const top = parts.length > 1 ? parts[0] : 'root';
-    const ext = path.extname(normalizedPath).toLowerCase() || 'noext';
-    const key = `${top}:${ext}`;
-    const existing = grouped.get(key);
-    if (existing) {
-      existing.push(file);
-    } else {
-      grouped.set(key, [file]);
-    }
-  }
-
+export function buildReviewGroups(changedFiles: ChangedFile[]): Array<{ label: string; files: ChangedFile[] }> {
+  const ordered = [...changedFiles].sort((left, right) => left.path.localeCompare(right.path));
   const results: Array<{ label: string; files: ChangedFile[] }> = [];
-  for (const [key, files] of Array.from(grouped.entries()).sort(([left], [right]) => left.localeCompare(right))) {
-    const labelBase = buildGroupLabel(key);
-    const ordered = [...files].sort((left, right) => left.path.localeCompare(right.path));
-    let bucket: ChangedFile[] = [];
-    let bucketLines = 0;
-    let bucketIndex = 1;
-    for (const file of ordered) {
-      const patchLines = countPatchLines(file.patch);
-      if (bucket.length && bucketLines + patchLines > MAX_GROUP_PATCH_LINES) {
-        const label = bucketIndex > 1 ? `${labelBase} (${bucketIndex})` : labelBase;
-        results.push({ label, files: bucket });
-        bucket = [];
-        bucketLines = 0;
-        bucketIndex += 1;
-      }
-      bucket.push(file);
-      bucketLines += patchLines;
+  let bucket: ChangedFile[] = [];
+  let bucketLines = 0;
+  for (const file of ordered) {
+    const patchLines = countPatchLines(file.patch);
+    if (bucket.length && bucketLines + patchLines > MAX_GROUP_PATCH_LINES) {
+      results.push({ label: `changed files (${results.length + 1})`, files: bucket });
+      bucket = [];
+      bucketLines = 0;
     }
-    if (bucket.length) {
-      const label = bucketIndex > 1 ? `${labelBase} (${bucketIndex})` : labelBase;
-      results.push({ label, files: bucket });
-    }
+    bucket.push(file);
+    bucketLines += patchLines;
+  }
+  if (bucket.length) {
+    results.push({ label: `changed files (${results.length + 1})`, files: bucket });
   }
   return results;
 }

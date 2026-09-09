@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReviewPrompt, filterRepositoryTreePaths, parseReviewResponse, shouldSkipFile } from '../src/reviewer.js';
+import { buildReviewGroups, buildReviewPrompt, filterRepositoryTreePaths, parseReviewResponse, shouldSkipFile } from '../src/reviewer.js';
 
 describe('reviewer prompt', () => {
   it('generates a prompt with title and patch snippets', () => {
@@ -16,6 +16,23 @@ describe('reviewer prompt', () => {
     expect(prompt).toContain('Feature update');
     expect(prompt).toContain('src/index.ts');
     expect(prompt).toContain('REVIEW MODE: both');
+  });
+});
+
+describe('large review grouping', () => {
+  it('coalesces files across directories and extensions into bounded passes', () => {
+    const patch = Array.from({ length: 200 }, () => '+value').join('\n');
+    const groups = buildReviewGroups([
+      { path: 'apps/a.ts', patch },
+      { path: 'docs/a.md', patch },
+      { path: 'infra/a.json', patch },
+      { path: 'packages/a.ts', patch },
+    ]);
+
+    expect(groups.map((group) => group.files.map((file) => file.path))).toEqual([
+      ['apps/a.ts', 'docs/a.md'],
+      ['infra/a.json', 'packages/a.ts'],
+    ]);
   });
 });
 
