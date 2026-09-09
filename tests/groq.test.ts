@@ -46,7 +46,7 @@ describe('GroqClient', () => {
         body: expect.stringContaining('"reasoning_effort":"low"'),
       }),
     );
-    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"max_completion_tokens":1024');
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"max_tokens":1024');
     expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('keep the complete response under 900 tokens');
     expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"thinking":{"type":"disabled"}');
     expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"response_format":{"type":"json_object"}');
