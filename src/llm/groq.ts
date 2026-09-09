@@ -170,7 +170,7 @@ export class GroqClient implements LLMClient {
       messages: [
         {
           role: 'system',
-          content: 'You are an expert code reviewer. Return only valid JSON matching the requested review schema, keep the complete response under 900 tokens, and do not include prose outside the JSON object.',
+          content: 'You are an expert code reviewer. Return only valid JSON matching the requested review schema, keep the complete response under 650 tokens, and do not include prose outside the JSON object.',
         },
         {
           role: 'user',
@@ -178,7 +178,7 @@ export class GroqClient implements LLMClient {
         },
       ],
       temperature: 1,
-      max_tokens: 1024,
+      max_tokens: 768,
       top_p: 1,
       reasoning_effort: this.reasoningEffort,
       thinking: { type: 'disabled' },
