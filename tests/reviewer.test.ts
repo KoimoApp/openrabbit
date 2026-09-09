@@ -21,7 +21,7 @@ describe('reviewer prompt', () => {
 
 describe('large review grouping', () => {
   it('coalesces files across directories and extensions into bounded passes', () => {
-    const patch = Array.from({ length: 140 }, () => '+value').join('\n');
+    const patch = Array.from({ length: 70 }, () => '+value').join('\n');
     const groups = buildReviewGroups([
       { path: 'apps/a.ts', patch },
       { path: 'docs/a.md', patch },
