@@ -4,6 +4,7 @@ import type { LLMCompletionOptions, LLMConfig, ReviewCommentType, ReviewResponse
 
 const VALID_COMMENT_TYPES: ReviewCommentType[] = ['bug', 'scope-drift', 'reuse', 'security', 'question', 'suggestion', 'style'];
 const VALID_VERDICTS = new Set(['ready to merge', 'looks good to me', 'needs changes', 'question', 'scope-drift']);
+const MAX_REPAIR_CANDIDATE_CHARS = 12_000;
 
 function extractTextFromResponse(body: any): string {
   if (!body) {
@@ -128,6 +129,24 @@ function parseReviewResponse(raw: string): ReviewResponse {
   }
 }
 
+function buildRepairPrompt(candidate: string): string {
+  return `Repair this malformed review candidate into one valid JSON object. Preserve its verdict and findings; do not add a new judgment or prose outside the JSON.
+
+Required shape:
+{"summary":{"verdict":"ready to merge|looks good to me|needs changes|question|scope-drift","primaryGoal":"","overview":"","scopeAssessment":"","riskAssessment":"","reuseNotes":[],"actionItems":[]},"comments":[],"separate_pr_suggestions":[]}
+
+Candidate:
+${candidate.slice(0, MAX_REPAIR_CANDIDATE_CHARS)}`;
+}
+
+function hasReviewVerdict(candidate: string): boolean {
+  const normalized = candidate.toLowerCase();
+  const marker = normalized.indexOf('verdict');
+  if (marker < 0) return false;
+  const verdictField = normalized.slice(marker, marker + 200);
+  return [...VALID_VERDICTS].some((verdict) => verdictField.includes(verdict));
+}
+
 function describeFetchError(error: unknown): string {
   if (!(error instanceof Error)) {
     return String(error);
@@ -201,7 +220,6 @@ export class GroqClient implements LLMClient {
 
   async complete(prompt: string, options: LLMCompletionOptions = {}): Promise<ReviewResponse> {
     const endpoints = this.buildEndpoints();
-    const body = JSON.stringify(this.buildRequestBody(prompt));
     const failures: string[] = [];
     const timeoutMs = options.timeoutMs ?? this.requestTimeoutMs;
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
@@ -211,6 +229,7 @@ export class GroqClient implements LLMClient {
 
     for (const url of endpoints) {
       let canRetryMalformedJson = true;
+      let requestPrompt = prompt;
       while (true) {
         const remainingMs = deadline - Date.now();
         if (remainingMs <= 0) {
@@ -219,6 +238,7 @@ export class GroqClient implements LLMClient {
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), remainingMs);
+        let responseText = '';
         try {
           const response = await fetch(url, {
             method: 'POST',
@@ -226,7 +246,7 @@ export class GroqClient implements LLMClient {
               Authorization: `Bearer ${this.apiKey}`,
               'Content-Type': 'application/json',
             },
-            body,
+            body: JSON.stringify(this.buildRequestBody(requestPrompt)),
             signal: controller.signal,
           });
 
@@ -236,12 +256,13 @@ export class GroqClient implements LLMClient {
           }
 
           const responseBody = await response.json();
-          const text = extractTextFromResponse(responseBody);
-          return parseReviewResponse(text);
+          responseText = extractTextFromResponse(responseBody);
+          return parseReviewResponse(responseText);
         } catch (error) {
           failures.push(`request to ${url} failed: ${describeFetchError(error)}`);
           if (canRetryMalformedJson && error instanceof Error && error.message === 'LLM response was not valid JSON.') {
             canRetryMalformedJson = false;
+            requestPrompt = hasReviewVerdict(responseText) ? buildRepairPrompt(responseText) : prompt;
             continue;
           }
           break;

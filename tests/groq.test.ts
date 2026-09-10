@@ -79,7 +79,36 @@ describe('GroqClient', () => {
     const response = await client.complete('Review this');
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[1]?.body).toContain('Review this');
     expect(response.summary.overview).toBe('Looks good');
+  });
+
+  it('repairs a malformed response that already contains a review verdict', async () => {
+    const truncated = '{"summary":{"verdict":"ready to merge","overview":"Looks';
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: truncated } }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: '{"summary":{"verdict":"ready to merge","overview":"Looks good"},"comments":[]}' } }],
+        }),
+      });
+
+    const client = new GroqClient({
+      apiKey: 'test-key',
+      apiUrl: 'https://api.example.com/v1',
+      model: 'example-model',
+    });
+
+    await client.complete('Review a very large diff');
+
+    const retryBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+    expect(retryBody.messages[1].content).toContain('Repair this malformed review candidate');
+    expect(retryBody.messages[1].content).toContain(truncated);
+    expect(retryBody.messages[1].content).not.toContain('Review a very large diff');
   });
 
   it('rejects repeated malformed model output instead of publishing it as a review', async () => {
