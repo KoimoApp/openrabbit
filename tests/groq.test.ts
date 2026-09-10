@@ -22,7 +22,7 @@ describe('GroqClient', () => {
           choices: [
             {
               message: {
-                content: '{"review":"Looks good","comments":[]}',
+                content: '{"summary":{"verdict":"looks good to me","overview":"Looks good"},"comments":[]}',
               },
             },
           ],
@@ -46,8 +46,8 @@ describe('GroqClient', () => {
         body: expect.stringContaining('"reasoning_effort":"low"'),
       }),
     );
-    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"max_tokens":768');
-    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('keep the complete response under 650 tokens');
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"max_tokens":1536');
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('keep the complete response under 1200 tokens');
     expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"thinking":{"type":"disabled"}');
     expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"response_format":{"type":"json_object"}');
     expect(response.summary.overview).toBe('Looks good');
@@ -65,7 +65,7 @@ describe('GroqClient', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          choices: [{ message: { content: '{"review":"Looks good","comments":[]}' } }],
+          choices: [{ message: { content: '{"summary":{"verdict":"looks good to me","overview":"Looks good"},"comments":[]}' } }],
         }),
       });
 
@@ -101,6 +101,31 @@ describe('GroqClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('retries structurally empty JSON instead of publishing a placeholder review', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: '{}' } }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: '{"summary":{"verdict":"ready to merge","overview":"Looks good"},"comments":[]}' } }],
+        }),
+      });
+
+    const client = new GroqClient({
+      apiKey: 'test-key',
+      apiUrl: 'https://api.example.com/v1',
+      model: 'example-model',
+    });
+
+    const response = await client.complete('Review this');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(response.summary.verdict).toBe('ready to merge');
+  });
+
   it('prepends /v1 when the configured base URL omits it', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
@@ -108,7 +133,7 @@ describe('GroqClient', () => {
         choices: [
           {
             message: {
-              content: '{"review":"Looks good","comments":[]}',
+              content: '{"summary":{"verdict":"looks good to me","overview":"Looks good"},"comments":[]}',
             },
           },
         ],

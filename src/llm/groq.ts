@@ -3,6 +3,7 @@ import type { LLMClient } from './index.js';
 import type { LLMCompletionOptions, LLMConfig, ReviewCommentType, ReviewResponse } from '../types.js';
 
 const VALID_COMMENT_TYPES: ReviewCommentType[] = ['bug', 'scope-drift', 'reuse', 'security', 'question', 'suggestion', 'style'];
+const VALID_VERDICTS = new Set(['ready to merge', 'looks good to me', 'needs changes', 'question', 'scope-drift']);
 
 function extractTextFromResponse(body: any): string {
   if (!body) {
@@ -101,14 +102,25 @@ function normalizeReviewResponse(value: unknown): ReviewResponse {
 
 function parseReviewResponse(raw: string): ReviewResponse {
   const text = raw.trim();
+
+  function requireVerdict(value: unknown): ReviewResponse {
+    const review = normalizeReviewResponse(value);
+    const verdict = review.summary.verdict?.toLowerCase();
+    if (!verdict || !VALID_VERDICTS.has(verdict)) {
+      throw new Error('LLM response was not valid JSON.');
+    }
+    review.summary.verdict = verdict;
+    return review;
+  }
+
   try {
-    return normalizeReviewResponse(JSON.parse(text));
+    return requireVerdict(JSON.parse(text));
   } catch {
     const first = text.indexOf('{');
     const last = text.lastIndexOf('}');
     if (first >= 0 && last > first) {
       try {
-        return normalizeReviewResponse(JSON.parse(text.slice(first, last + 1)));
+        return requireVerdict(JSON.parse(text.slice(first, last + 1)));
       } catch {
       }
     }
@@ -170,7 +182,7 @@ export class GroqClient implements LLMClient {
       messages: [
         {
           role: 'system',
-          content: 'You are an expert code reviewer. Return only valid JSON matching the requested review schema, keep the complete response under 650 tokens, and do not include prose outside the JSON object.',
+          content: 'You are an expert code reviewer. Return only valid JSON matching the requested review schema, keep the complete response under 1200 tokens, and do not include prose outside the JSON object. Always include summary.verdict; omit optional detail before omitting required fields.',
         },
         {
           role: 'user',
@@ -178,7 +190,7 @@ export class GroqClient implements LLMClient {
         },
       ],
       temperature: 1,
-      max_tokens: 768,
+      max_tokens: 1536,
       top_p: 1,
       reasoning_effort: this.reasoningEffort,
       thinking: { type: 'disabled' },
