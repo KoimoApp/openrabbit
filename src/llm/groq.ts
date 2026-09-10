@@ -198,36 +198,44 @@ export class GroqClient implements LLMClient {
     const deadline = Date.now() + Math.min(this.requestTimeoutMs, timeoutMs);
 
     for (const url of endpoints) {
-      const remainingMs = deadline - Date.now();
-      if (remainingMs <= 0) {
-        break;
-      }
-
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), remainingMs);
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body,
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          const responseText = await response.text();
-          throw new Error(`LLM API error ${response.status} from ${url}: ${responseText}`);
+      let canRetryMalformedJson = true;
+      while (true) {
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) {
+          break;
         }
 
-        const responseBody = await response.json();
-        const text = extractTextFromResponse(responseBody);
-        return parseReviewResponse(text);
-      } catch (error) {
-        failures.push(`request to ${url} failed: ${describeFetchError(error)}`);
-      } finally {
-        clearTimeout(timeout);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), remainingMs);
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body,
+            signal: controller.signal,
+          });
+
+          if (!response.ok) {
+            const responseText = await response.text();
+            throw new Error(`LLM API error ${response.status} from ${url}: ${responseText}`);
+          }
+
+          const responseBody = await response.json();
+          const text = extractTextFromResponse(responseBody);
+          return parseReviewResponse(text);
+        } catch (error) {
+          failures.push(`request to ${url} failed: ${describeFetchError(error)}`);
+          if (canRetryMalformedJson && error instanceof Error && error.message === 'LLM response was not valid JSON.') {
+            canRetryMalformedJson = false;
+            continue;
+          }
+          break;
+        } finally {
+          clearTimeout(timeout);
+        }
       }
     }
 

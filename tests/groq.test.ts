@@ -54,8 +54,36 @@ describe('GroqClient', () => {
     expect(response.comments).toEqual([]);
   });
 
-  it('rejects malformed model output instead of publishing it as a review', async () => {
-    fetchMock.mockResolvedValueOnce({
+  it('retries one malformed model response before publishing a review', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'Let me work through this carefully...' } }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: '{"review":"Looks good","comments":[]}' } }],
+        }),
+      });
+
+    const client = new GroqClient({
+      apiKey: 'test-key',
+      apiUrl: 'https://api.example.com/v1',
+      model: 'z-ai/glm-5.3-flash',
+      reasoningEffort: 'low',
+    });
+
+    const response = await client.complete('Review this');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(response.summary.overview).toBe('Looks good');
+  });
+
+  it('rejects repeated malformed model output instead of publishing it as a review', async () => {
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
         choices: [{ message: { content: 'Let me work through this carefully...' } }],
@@ -70,6 +98,7 @@ describe('GroqClient', () => {
     });
 
     await expect(client.complete('Review this')).rejects.toThrow('LLM response was not valid JSON.');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('prepends /v1 when the configured base URL omits it', async () => {
